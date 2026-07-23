@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core import compute_health, read_vitals, compute_assessment
-from config import ALLOWED_ORIGINS
+from config import ALLOWED_ORIGINS, ALLOWED_ORIGIN_REGEX
 
 log = logging.getLogger("fitwork")
 
@@ -28,6 +28,7 @@ app = FastAPI(title="FitWork API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
