@@ -5,7 +5,13 @@ Pengganti Azure Functions. Menyediakan:
   GET/POST /healthscore   → skor kesehatan dari vitals kamera (model ML)
   POST     /assess        → DASS-21 + prediksi ML opsional
   WS       /ws/vitals     → real-time: client kirim vitals → server balas skor
-                            (pengganti SignalR echo; per-koneksi, cukup 1 user)
+                            (pengganti SignalR echo; per-koneksi, cukup 1 user).
+                            Opsional ?user_id=<uuid> → ikut menerima push data
+                            gelang IoT milik user tsb (source="iot").
+  POST     /iot/vitals                    → data gelang IoT (lihat iot.py)
+  GET      /iot/vitals/{user_id}/terbaru  → data gelang terbaru (lihat iot.py)
+  POST     /iot/room                      → data unit ruangan (lihat iot.py)
+  GET      /iot/room/{user_id}/terbaru    → data ruangan terbaru (lihat iot.py)
 
 CORS diurus di sini via CORSMiddleware (dulu di level platform Azure).
 Jalankan lokal:  uvicorn main:app --reload --port 8000
@@ -20,6 +26,8 @@ from fastapi.responses import JSONResponse
 
 from core import compute_health, read_vitals, compute_assessment
 from config import ALLOWED_ORIGINS, ALLOWED_ORIGIN_REGEX
+from iot import router as iot_router
+from vitals_hub import hub
 
 log = logging.getLogger("fitwork")
 
@@ -33,6 +41,8 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=False,
 )
+
+app.include_router(iot_router)
 
 
 @app.get("/")
@@ -78,7 +88,7 @@ async def assess(req: Request):
 
 
 @app.websocket("/ws/vitals")
-async def ws_vitals(ws: WebSocket):
+async def ws_vitals(ws: WebSocket, user_id: str | None = None):
     """
     Real-time echo (pengganti SignalR):
       1. Client buka koneksi.
@@ -87,8 +97,14 @@ async def ws_vitals(ws: WebSocket):
          client tersebut.
     Karena SignalR lama hanya echo ke pengirim (demo satu user), model
     per-koneksi ini cukup dan jauh lebih sederhana daripada broadcast hub.
+
+    Tambahan IoT: bila client membuka /ws/vitals?user_id=<uuid>, koneksi
+    didaftarkan ke hub (vitals_hub.py) sehingga data dari POST /iot/vitals milik
+    user itu ikut didorong ke sini dengan format pesan yang sama + source="iot".
+    Tanpa user_id (atau user_id tidak valid) perilakunya tetap echo seperti dulu.
     """
     await ws.accept()
+    hub_key = hub.connect(user_id, ws)
     try:
         while True:
             raw = await ws.receive_text()
@@ -100,6 +116,8 @@ async def ws_vitals(ws: WebSocket):
             except Exception as e:  # noqa: BLE001
                 log.exception("ws compute failed")
                 data = {"status": "error", "message": str(e)}
-            await ws.send_text(json.dumps(data))
+            await hub.send_text(ws, json.dumps(data))
     except WebSocketDisconnect:
         pass
+    finally:
+        hub.disconnect(hub_key, ws)

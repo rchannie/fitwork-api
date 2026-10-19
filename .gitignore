@@ -6,3 +6,4 @@ venv/
 .env.local
 *.log
 .vscode/
+.pytest_cache/

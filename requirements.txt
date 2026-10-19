@@ -3,3 +3,4 @@ uvicorn[standard]
 numpy
 xgboost
 scikit-learn
+supabase>=2.0

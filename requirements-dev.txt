@@ -1,0 +1,4 @@
+# Dependensi untuk development & test (tidak dipakai Railway).
+-r requirements.txt
+pytest
+httpx
